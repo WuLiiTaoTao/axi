@@ -66,6 +66,8 @@ module axi_demux #(
   input  logic                          rst_ni,
   input  logic                          test_i,
   // Slave Port
+  // The AW and AR channels each have a select input, to determine the master port to which they are sent. 
+  // The select can, for example, be driven by an (external) address decoder to map address ranges to different AXI slaves.
   input  axi_req_t                      slv_req_i,
   input  select_t                       slv_aw_select_i,
   input  select_t                       slv_ar_select_i,

@@ -208,6 +208,7 @@ module axi_mux #(
     //--------------------------------------
     // ID prepend for all slave ports
     //--------------------------------------
+    // HT: only add highest ID bit for master
     for (genvar i = 0; i < NoSlvPorts; i++) begin : gen_id_prepend
       axi_id_prepend #(
         .NoBus            ( 32'd1               ), // one AXI bus per slave port
@@ -261,6 +262,7 @@ module axi_mux #(
     //--------------------------------------
     // AW Channel
     //--------------------------------------
+    // HT: normal rr_arb
     rr_arb_tree #(
       .NumIn    ( NoSlvPorts    ),
       .DataType ( mst_aw_chan_t ),
@@ -289,18 +291,22 @@ module axi_mux #(
       mst_aw_valid    = 1'b0;
       aw_ready        = 1'b0;
       // had a downstream stall, be valid and send the AW along
+      // wait slv aw_ready; hold output
       if (lock_aw_valid_q) begin
         mst_aw_valid = 1'b1;
         // transaction
-        if (mst_aw_ready) begin
-          aw_ready        = 1'b1;
-          lock_aw_valid_d = 1'b0;
+        if (mst_aw_ready) begin // aw handshack
+          aw_ready        = 1'b1; // upstream 
+          lock_aw_valid_d = 1'b0; // reset lock;
           load_aw_lock    = 1'b1;
         end
       end else begin
-        if (!w_fifo_full && aw_valid) begin
+        if (!w_fifo_full && aw_valid) begin // normal downstream;
           mst_aw_valid = 1'b1;
-          w_fifo_push = 1'b1;
+          w_fifo_push = 1'b1; 
+          //FIXME:maybe this is a bug; it must when aw_valud && aw_ready. 
+          //no waiting for aw_ready maybe let w_channel starting trancition before aw.
+          //IN AXI SPEC, it is allowed that slv_wready/mst_wvalid assert befor slv_awready.
           if (mst_aw_ready) begin
             aw_ready = 1'b1;
           end else begin

@@ -57,6 +57,8 @@ module axi_demux_simple #(
   input  logic                          rst_ni,
   input  logic                          test_i,
   // Slave Port
+  // The AW and AR channels each have a select input, to determine the master port to which they are sent. 
+  // The select can, for example, be driven by an (external) address decoder to map address ranges to different AXI slaves.
   input  axi_req_t                      slv_req_i,
   input  select_t                       slv_aw_select_i,
   input  select_t                       slv_ar_select_i,
@@ -172,9 +174,13 @@ module axi_demux_simple #(
           // Also stall if previous transmitted AWs still have active W's in flight.
           // This prevents deadlocking of the W channel. The counters are there for the
           // Handling of the B responses.
+          // !!! When the demultiplexer receives two transactions with the same ID and direction (i.e., both read or both write) but targeting two different master ports, 
+          // it will not accept the second transaction until the first has completed
+
+          // to find that if a AXI_ID's channel occupy or free;
           if (slv_req_i.aw_valid &&
-                ((w_open == '0) || (w_select == slv_aw_select_i)) &&
-                (!aw_select_occupied || (slv_aw_select_i == lookup_aw_select))) begin
+                ((w_open == '0) || (w_select == slv_aw_select_i)) && // fifo empty or same channel select; (if not , should wait for channel finish)
+                (!aw_select_occupied || (slv_aw_select_i == lookup_aw_select))) begin // aw_AXI-ID not in-flight or in-flight transition in same channel select 
             // connect the handshake
             aw_valid     = 1'b1;
             // push arbitration to the W FIFO regardless, do not wait for the AW transaction
@@ -207,6 +213,9 @@ module axi_demux_simple #(
       assign aw_select_occupied = 1'b0;
       assign aw_id_cnt_full = 1'b0;
     end else begin : gen_aw_id_counter
+      // to find that if a AXI_ID's channel occupy or free; 
+      // implementation for each id with channel select;
+      // reject req to deferent channel with same id;
       axi_demux_id_counters #(
         .AxiIdBits         ( AxiLookBits    ),
         .CounterWidth      ( IdCounterWidth ),
@@ -233,6 +242,7 @@ module axi_demux_simple #(
     // `w_select` determines, which handshaking is connected.
     // AWs are only forwarded, if the counter is empty, or `w_select_q` is the same as
     // `slv_aw_select_i`.
+    // counter for tracsition;
     counter #(
       .WIDTH           ( IdCounterWidth ),
       .STICKY_OVERFLOW ( 1'b0           )
@@ -249,6 +259,7 @@ module axi_demux_simple #(
     );
 
     `FFLARN(w_select_q, slv_aw_select_i, w_cnt_up, select_t'(0), clk_i, rst_ni)
+    //if counter >0 , channel select by register of output select; else pass through the slv aw;
     assign w_select       = (|w_open) ? w_select_q : slv_aw_select_i;
     assign w_select_valid = w_cnt_up | (|w_open);
 
